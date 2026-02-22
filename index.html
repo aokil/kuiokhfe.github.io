@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌤️ 极简天气查询</title>
+    <style>
+        body { font-family: sans-serif; max-width: 400px; margin: 40px auto; padding: 20px; text-align: center; }
+        input, button { padding: 10px; font-size: 16px; margin: 5px; }
+        #result { margin-top: 20px; padding: 20px; background: #f0f4f8; border-radius: 12px; display: none; }
+        .temp { font-size: 48px; font-weight: bold; }
+        .hint { color: #666; font-size: 14px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2>⛅ 天气查询</h2>
+    <div>
+        <input type="text" id="cityInput" placeholder="输入城市名 (建议用英文)" value="Beijing">
+        <button onclick="fetchWeather()">查询</button>
+    </div>
+    <div id="result"></div>
+    <div class="hint">💡 如果中文名查询失败，请尝试英文名 (如: Beijing, Shanghai)</div>
+
+    <script>
+        // ================== API 地址 ==================
+        const GEO_API = 'https://geocoding-api.open-meteo.com/v1/search';       // 地理编码（城市→坐标）
+        const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';           // 天气查询
+
+        // 天气代码 → 中文描述 (WMO 代码)
+        function getWeatherDesc(code) {
+            const map = {
+                0: '晴朗', 1: '晴间多云', 2: '多云', 3: '阴',
+                45: '雾', 48: '雾凇',
+                51: '小雨', 53: '中雨', 55: '大雨',
+                56: '冻雨', 57: '强冻雨',
+                61: '小雨', 63: '中雨', 65: '大雨',
+                66: '冻雨', 67: '强冻雨',
+                71: '小雪', 73: '中雪', 75: '大雪', 77: '雪粒',
+                80: '小阵雨', 81: '中阵雨', 82: '强阵雨',
+                85: '小阵雪', 86: '强阵雪',
+                95: '雷雨', 96: '雷雨伴冰雹', 99: '强雷雨伴冰雹'
+            };
+            return map[code] || '未知';
+        }
+
+        async function fetchWeather() {
+            const city = document.getElementById('cityInput').value.trim();
+            if (!city) return alert('请输入城市名');
+
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '⏳ 查询中...';
+
+            try {
+                // 1. 城市 → 坐标 (地理编码)
+                const geoUrl = `${GEO_API}?name=${encodeURIComponent(city)}&count=1`;
+                const geoRes = await fetch(geoUrl);
+                const geoData = await geoRes.json();
+
+                // 检查是否找到城市
+                if (!geoData.results || geoData.results.length === 0) {
+                    resultDiv.innerHTML = `❌ 未找到城市 "${city}"。<br>👉 请尝试英文名 (如 Beijing)`;
+                    return;
+                }
+
+                const { latitude, longitude, name } = geoData.results[0];
+
+                // 2. 获取天气 (使用坐标)
+                const weatherUrl = `${WEATHER_API}?latitude=${latitude}&longitude=${longitude}&current_weather=true&timezone=auto`;
+                const weatherRes = await fetch(weatherUrl);
+                const weatherData = await weatherRes.json();
+
+                if (!weatherData.current_weather) {
+                    throw new Error('无法获取天气数据');
+                }
+
+                const w = weatherData.current_weather;
+                const weatherText = getWeatherDesc(w.weathercode);
+                const updateTime = w.time ? new Date(w.time).toLocaleString() : '未知';
+
+                // 3. 显示结果
+                resultDiv.innerHTML = `
+                    <h3>${name}</h3>
+                    <div class="temp">${w.temperature ?? '--'}°C</div>
+                    <p>🌥️ 天气：${weatherText}</p>
+                    <p>🧭 风向：${w.winddirection ?? '--'}° (风速 ${w.windspeed ?? '--'} km/h)</p>
+                    <p>🕒 更新时间：${updateTime}</p>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `❌ 请求出错：${error.message}`;
+                console.error(error);
+            }
+        }
+
+        // 页面加载后自动查询一次（演示）
+        window.onload = () => fetchWeather();
+    </script>
+</body>
+</html>
